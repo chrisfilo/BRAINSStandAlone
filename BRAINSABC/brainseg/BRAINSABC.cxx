@@ -22,6 +22,7 @@
 #include "PrettyPrintTable.h"
 #include "DenoiseFiltering.h"
 #include "itkImageDuplicator.h"
+#include "itkBRAINSROIAutoImageFilter.h"
 
 typedef itk::Image<float, 3>         FloatImageType;
 typedef itk::Image<unsigned char, 3> ByteImageType;
@@ -295,6 +296,32 @@ static std::vector<bool> FindDuplicateImages(const std::vector<FloatImagePointer
   InterpType::Pointer myInterp = InterpType::New();
 
   std::vector<bool> isDuplicated(candidateSameImageList.size(), false);
+#if 1
+  typedef itk::SpatialObject<3>        SOImageMaskType;
+  typedef itk::Image<unsigned char, 3> VolumeMaskType;
+  std::vector<SOImageMaskType::Pointer> candidateSameImageMaskList(candidateSameImageList.size());
+  for( unsigned int start = 0; start < candidateSameImageList.size(); start++ )
+    {
+    typedef itk::Image<signed int, 3>    VolumeImageType;
+
+    const float otsuPercentileThreshold=0.01F;
+    const float thresholdCorrectionFactor = 1.0F;
+    const unsigned int closingSize=0; // These are just to make masking as fast as possible.
+    const unsigned int ROIAutoDilateSize=0; // These are just to make masking as fast as possible.
+    typedef itk::BRAINSROIAutoImageFilter<FloatImageType, VolumeMaskType> ROIAutoType;
+    ROIAutoType::Pointer ROIFilter = ROIAutoType::New();
+    ROIFilter->SetInput(candidateSameImageList[start]);
+    ROIFilter->SetOtsuPercentileThreshold(otsuPercentileThreshold);
+    ROIFilter->SetClosingSize(closingSize);
+    ROIFilter->SetThresholdCorrectionFactor(thresholdCorrectionFactor);
+    ROIFilter->SetDilateSize(ROIAutoDilateSize);
+    ROIFilter->Update();
+    //const SOImageMaskType::Pointer maskWrapper = ROIFilter->GetSpatialObjectROI();
+    //VolumeMaskType::Pointer  MaskImage = ROIFilter->GetOutput();
+    //candidateSameImageMaskList[start]=ROIFilter->GetOutput();
+    candidateSameImageMaskList[start]=ROIFilter->GetSpatialObjectROI();
+    }
+#endif
   for( unsigned int start = 0; start < candidateSameImageList.size(); start++ )
     {
     for( unsigned int q = start + 1; q < candidateSameImageList.size(); q++ )
@@ -303,6 +330,10 @@ static std::vector<bool> FindDuplicateImages(const std::vector<FloatImagePointer
       NormalizerType::Pointer myNormalizer = NormalizerType::New();
       myNormalizer->SetFixedImage(candidateSameImageList[start]);
       myNormalizer->SetMovingImage(candidateSameImageList[q]);
+#if 1
+      myNormalizer->SetFixedImageMask(candidateSameImageMaskList[start]);
+      myNormalizer->SetMovingImageMask(candidateSameImageMaskList[q]);
+#endif
       myNormalizer->SetTransform(myID);
       myNormalizer->SetFixedImageRegion( candidateSameImageList[start]->GetBufferedRegion() );
       myInterp->SetInputImage(candidateSameImageList[q]);
